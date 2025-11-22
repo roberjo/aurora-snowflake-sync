@@ -1,0 +1,57 @@
+# Aurora to Snowflake Sync - Aider Configuration
+
+## Project Context
+Serverless data pipeline syncing AWS Aurora PostgreSQL to Snowflake.
+- **Stack:** Python 3.9, Terraform, AWS (Lambda, S3, EventBridge), Snowflake
+- **Pattern:** Batch incremental sync (hourly/daily) using watermarks
+
+## Coding Standards
+
+### Python
+- Style: PEP 8, black (88 chars), flake8 (complexity ≤ 10)
+- Docstrings: Google style for all public functions
+- Error handling: Specific exceptions, context managers
+- Testing: pytest with mocking (AWS, DB, Vault)
+
+### Terraform
+- Format with `terraform fmt`
+- Tag all resources (Name, Environment, ManagedBy, Project)
+- Variables must have type and description
+- Never hardcode secrets
+
+### SQL (Snowflake)
+- UPPERCASE keywords (SELECT, MERGE)
+- UPPERCASE objects (DATABASE.SCHEMA.TABLE)
+- lowercase columns (order_id, updated_at)
+
+## Security Requirements
+- No secrets in code - use Vault
+- Run `gitleaks detect` before commit
+- Run `checkov -d terraform/` on IaC changes
+- Least privilege IAM
+- Validate all input
+
+## Architecture Patterns
+- **Lambda:** Stateless, idempotent, <5 min execution
+- **Error handling:** Fail fast, log with context
+- **Testing:** Mock external deps, test error paths
+- **Watermark logic:** Query Snowflake MAX(updated_at), default to '1970-01-01'
+
+## Anti-Patterns (Avoid)
+- SELECT * in production
+- Hardcoded credentials/endpoints
+- Bare except: clauses
+- Resources in default VPC
+- Logging secrets/PII
+
+## File Structure
+- `lambda/exporter.py` - Main Lambda handler
+- `config/sync_config.json` - Tables to sync
+- `terraform/` - IaC (modules: network, compute, storage, snowflake)
+- `tests/` - Unit tests (mirrors lambda/ structure)
+- `docs/` - Architecture, runbooks, guides
+
+## Common Tasks
+- **Add table:** Update config → Create Snowflake tables → Create merge task
+- **Edit Lambda:** Update code → Update tests → Run black/flake8 → Run pytest
+- **Edit IaC:** Edit .tf → Run terraform fmt/validate → Run checkov

@@ -1,0 +1,31 @@
+{
+    "customInstructions": "# Aurora to Snowflake Sync Project\n\n## Context\nServerless data pipeline: Aurora PostgreSQL → Lambda → S3 → Snowflake\nStack: Python 3.9, Terraform, AWS Lambda, Snowflake, Vault\n\n## Standards\n- Python: PEP 8, black (88 chars), flake8, pytest\n- Terraform: terraform fmt, tagged resources, no hardcoded secrets\n- SQL: UPPERCASE keywords, lowercase columns\n- Git: Conventional Commits (feat/fix/docs/refactor)\n\n## Security\n- No secrets in code/git (use Vault)\n- Run gitleaks + checkov before commit\n- Least privilege IAM\n- Validate all input\n\n## Patterns\n- Lambda: stateless, idempotent, < 5 min timeout\n- Error handling: specific exceptions, context managers\n- Testing: mock external deps, test error paths\n- Logging: include context (table, timestamps), no PII\n\n## Anti-Patterns\n❌ SELECT * in production\n❌ Hardcoded credentials/endpoints\n❌ Bare except:\n❌ Resources in default VPC",
+    "rules": [
+        {
+            "pattern": "*.py",
+            "instructions": "Follow PEP 8. Use black formatting. Add docstrings (Google style). Mock AWS/DB calls in tests. Handle exceptions specifically."
+        },
+        {
+            "pattern": "*.tf",
+            "instructions": "Use terraform fmt. Tag all resources. Never hardcode secrets. Add variable descriptions and types."
+        },
+        {
+            "pattern": "*.sql",
+            "instructions": "UPPERCASE keywords. Document complex MERGE logic. Use parameterized queries."
+        }
+    ],
+    "codeReview": {
+        "critical": [
+            "No secrets committed",
+            "Security scans passing (gitleaks, checkov)",
+            "Tests added/passing",
+            "Error handling present"
+        ],
+        "important": [
+            "Code follows style guide",
+            "Documentation updated",
+            "Logging includes context",
+            "Resources properly tagged"
+        ]
+    }
+}

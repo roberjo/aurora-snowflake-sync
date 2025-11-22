@@ -1,0 +1,95 @@
+# Aurora to Snowflake Sync - Project Instructions
+
+## Project Context
+Serverless data pipeline syncing AWS Aurora PostgreSQL to Snowflake using Lambda, S3, and Snowpipe. Batch processing (hourly/daily), minimal infrastructure costs.
+
+**Tech Stack:** Python 3.9+, Terraform, AWS (Lambda, S3, EventBridge), Snowflake, Hashicorp Vault
+
+## Coding Standards
+
+### Python
+- **Style:** PEP 8, use `black` (88 chars), `flake8` (max complexity 10)
+- **Docstrings:** Google style, required for all public functions
+- **Error Handling:** Specific exceptions, always cleanup resources, use context managers
+- **Type Hints:** Encouraged for function signatures
+- **Imports:** Order: stdlib, third-party, local (separated by blank lines)
+
+### Terraform
+- **Format:** `terraform fmt` before commit
+- **Naming:** snake_case for all identifiers
+- **Tagging:** All resources must have Name, Environment, ManagedBy, Project tags
+- **Secrets:** NEVER hardcode - use Vault or AWS Secrets Manager
+- **Validation:** Add type and description to all variables
+
+### SQL (Snowflake)
+- **Keywords:** UPPERCASE (SELECT, FROM, WHERE)
+- **Objects:** UPPERCASE (DATABASE, SCHEMA, TABLE)
+- **Columns:** lowercase with underscores
+
+## Architecture Patterns
+
+### Lambda Design
+- Stateless: Query Snowflake for watermarks, don't maintain state
+- Idempotent: Re-running shouldn't cause duplication
+- Timeout-aware: Design for 5-min max execution
+- Error-first: Fail fast with clear error messages
+
+### Security Principles
+- Least privilege IAM
+- Secrets in Vault, never in code/git
+- VPC isolation (Lambda in private subnet)
+- All data encrypted (TLS 1.2+ in transit, AES-256 at rest)
+
+## Anti-Patterns to Avoid
+❌ Don't use `SELECT *` in production
+❌ Don't commit `.tfvars` with credentials
+❌ Don't use hardcoded table names (use config)
+❌ Don't use bare `except:` clauses
+❌ Don't create resources in default VPC
+❌ Don't ignore security scan results
+
+## File Conventions
+- Python: `lowercase_with_underscores.py`
+- Terraform: `resource_type.tf`
+- Scripts: `verb_noun.sh`
+- Docs: `UPPERCASE.md`
+
+## Before Suggesting Code
+1. Follow established patterns in existing files
+2. Add error handling and logging
+3. Include unit tests
+4. Consider Lambda environment (timeouts, memory)
+5. Prefer simplicity over cleverness
+
+## Testing
+- Mock external dependencies (AWS, Snowflake, Vault)
+- Test error paths and edge cases
+- Use descriptive test names: `test_lambda_handler_returns_500_when_vault_unavailable`
+- Follow AAA pattern (Arrange, Act, Assert)
+
+## Common Tasks
+
+### Adding a Table
+1. Update `config/sync_config.json`
+2. Create Snowflake staging/final tables
+3. Create Snowflake merge task
+4. Update docs
+
+### Modifying Lambda
+1. Update unit tests
+2. Run `black` and `flake8`
+3. Test locally with mocks
+4. Update docstrings
+
+### Changing Infrastructure
+1. Run `terraform validate` and `terraform fmt`
+2. Run `checkov -d terraform/` for security
+3. Document in PR
+4. Plan before apply
+
+## Security Requirements
+- Run `gitleaks detect` before commit
+- Run `checkov -d terraform/` on IaC changes
+- Pin dependency versions
+- Validate all external input
+- Never log secrets/PII
