@@ -1,0 +1,59 @@
+pipeline:
+  name: Aurora-Snowflake-Sync-Deploy
+  identifier: AuroraSnowflakeSyncDeploy
+  projectIdentifier: DefaultProject
+  orgIdentifier: default
+  tags: {}
+  stages:
+    - stage:
+        name: Deploy Infrastructure
+        identifier: Deploy_Infrastructure
+        description: ""
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: TerraformApply
+                  name: Terraform Apply
+                  identifier: Terraform_Apply
+                  spec:
+                    configuration:
+                      type: Inline
+                      spec:
+                        configFiles:
+                          store:
+                            type: Github
+                            spec:
+                              gitFetchType: Branch
+                              branch: main
+                              folderPath: terraform
+                              connectorRef: account.Github_Connector
+                    provisionerIdentifier: default
+                    workspace: aurora-snowflake-sync
+    - stage:
+        name: Update Lambda Code
+        identifier: Update_Lambda_Code
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Update Function
+                  identifier: Update_Function
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          aws lambda update-function-code --function-name aurora-snowflake-sync-exporter --s3-bucket my-artifact-bucket --s3-key exporter.zip
+                    environmentVariables:
+                      - name: AWS_ACCESS_KEY_ID
+                        type: Secret
+                        value: aws_access_key
+                      - name: AWS_SECRET_ACCESS_KEY
+                        type: Secret
+                        value: aws_secret_key

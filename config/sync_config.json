@@ -1,0 +1,14 @@
+{
+  "tables": [
+    {
+      "table_name": "public.orders",
+      "watermark_col": "updated_at",
+      "primary_key": "order_id"
+    },
+    {
+      "table_name": "public.customers",
+      "watermark_col": "updated_at",
+      "primary_key": "customer_id"
+    }
+  ]
+}
