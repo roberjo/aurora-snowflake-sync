@@ -34,46 +34,92 @@ pip install -r lambda/requirements.txt
 pip install pytest black flake8
 ```
 
-### 2. Running Tests
-Unit tests are located in `tests/` (create if missing).
+## Testing & Quality Assurance
+
+### 1. Unit Tests
+We use `pytest` for unit testing the Python Lambda code.
+
+**Run Tests:**
 ```bash
-pytest
+pytest tests/
 ```
 
-### 3. Linting & Formatting
-We use `black` for formatting and `flake8` for linting.
+**Expected Output:**
+```text
+================= test session starts ==================
+platform win32 -- Python 3.9.x, pytest-7.x, pluggy-1.x
+rootdir: D:\Github\aurora-snowflake-sync
+collected 5 items
+
+tests\test_config.py .                                   [ 20%]
+tests\test_exporter.py ....                              [100%]
+
+================== 5 passed in 0.45s ===================
+```
+
+### 2. Linting
+Ensure code quality with `flake8` (logic) and `black` (formatting).
+
+**Run Linting:**
 ```bash
-black lambda/
 flake8 lambda/
+black --check lambda/
 ```
 
-### 4. Local Lambda Invocation
-You can use `python-lambda-local` to test the handler locally, provided you have set up the necessary environment variables and network access (VPN/Tunnel) to the database.
+### 3. Terraform Validation
+Validate the syntax and configuration of Infrastructure as Code.
+
+**Run Validation:**
 ```bash
-export VAULT_ADDR="https://vault.example.com"
-export VAULT_TOKEN="dev-token"
-python-lambda-local -f lambda_handler lambda/exporter.py event.json
+cd terraform
+terraform init -backend=false
+terraform validate
 ```
 
-## Adding New Tables
-1.  **Update Config**: Add the table definition to `config/sync_config.json`.
-    ```json
-    {
-      "table_name": "public.new_table",
-      "watermark_col": "updated_at"
-    }
-    ```
-2.  **Snowflake Setup**:
-    *   Create the target table in Snowflake.
-    *   Create the staging table.
-    *   Create the Merge Task (see `scripts/setup_snowflake.sql`).
+**Expected Output:**
+```text
+Success! The configuration is valid.
+```
 
-## Infrastructure Changes
-1.  Navigate to `terraform/`.
-2.  Make changes to `.tf` files.
-3.  Validate: `terraform validate`.
-4.  Format: `terraform fmt -recursive`.
-5.  Plan: `terraform plan`.
+## Security Scanning
+
+### 1. Vulnerability Scanning (Checkov)
+We recommend using [Checkov](https://www.checkov.io/) to scan Terraform code for security misconfigurations.
+
+**Installation:**
+```bash
+pip install checkov
+```
+
+**Run Scan:**
+```bash
+checkov -d terraform/
+```
+
+**Expected Output:**
+Checkov will report passed/failed checks (e.g., ensuring S3 buckets are encrypted, Security Groups are restricted).
+
+### 2. Secret Scanning (Gitleaks)
+Prevent secrets from being committed using [Gitleaks](https://github.com/gitleaks/gitleaks).
+
+**Installation:**
+Follow instructions for your OS (e.g., `brew install gitleaks` or download binary).
+
+**Run Scan:**
+```bash
+gitleaks detect --source . -v
+```
+
+**Expected Output:**
+```text
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+NO LEAKS FOUND
+```
 
 ## Branching Strategy
 *   **main**: Production-ready code.

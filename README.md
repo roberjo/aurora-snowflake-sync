@@ -27,6 +27,40 @@ This project implements a serverless, batch-oriented data synchronization pipeli
 *   Snowflake Account
 *   Hashicorp Vault
 
+### Quality & Security
+
+### Testing
+Run unit tests to verify logic:
+```bash
+pip install pytest
+pytest tests/
+```
+
+### Validation
+Validate Terraform configuration:
+```bash
+cd terraform
+terraform validate
+```
+
+### Security Scans
+*   **Secrets**: Run `gitleaks detect` to ensure no credentials are committed.
+*   **IaC Security**: Run `checkov -d terraform/` to scan for infrastructure misconfigurations.
+
+## Configuration
+
+Edit `config/sync_config.json` to add tables:
+```json
+{
+  "tables": [
+    {
+      "table_name": "public.orders",
+      "watermark_col": "updated_at"
+    }
+  ]
+}
+```
+
 ### Setup
 1.  **Configure Variables**: Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars`.
 2.  **Deploy Infrastructure**: `terraform apply`.

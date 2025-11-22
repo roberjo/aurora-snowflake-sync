@@ -1,0 +1,11 @@
+# This file defines who owns which files in the repository.
+# GitHub will automatically request review from these owners.
+
+# Global owners
+*       @my-org/data-engineering
+
+# Infrastructure
+/terraform/   @my-org/devops
+
+# Security
+/docs/SECURITY.md @my-org/security
