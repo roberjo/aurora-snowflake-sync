@@ -1,3 +1,9 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# OUTPUTS
+# ---------------------------------------------------------------------------------------------------------------------
+# These outputs provide key information about the deployed infrastructure.
+# They are useful for verification, integration with other systems, or for quick access to resource IDs.
+
 output "vpc_id" {
   description = "The ID of the VPC"
   value       = module.network.vpc_id

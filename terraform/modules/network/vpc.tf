@@ -1,6 +1,19 @@
-variable "vpc_cidr" {}
-variable "project_name" {}
+# ---------------------------------------------------------------------------------------------------------------------
+# NETWORK MODULE: VPC
+# ---------------------------------------------------------------------------------------------------------------------
+# This module creates the networking foundation for the project.
+# It sets up a Virtual Private Cloud (VPC) with public and private subnets,
+# internet gateways for connectivity, and security groups to control traffic flow.
 
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC (e.g., 10.0.0.0/16)."
+}
+variable "project_name" {
+  description = "Project name for resource tagging."
+}
+
+# Main VPC
+# The isolated network environment for all resources.
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
@@ -11,6 +24,8 @@ resource "aws_vpc" "main" {
   }
 }
 
+# Private Subnets
+# Used for resources that should not be directly accessible from the internet (e.g., Lambda, Databases).
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -22,6 +37,9 @@ resource "aws_subnet" "private" {
   }
 }
 
+# Public Subnets
+# Used for resources that need direct internet access (e.g., Load Balancers, NAT Gateways).
+# In this architecture, they might be used for NAT Gateways if the Lambda needs outbound internet access.
 resource "aws_subnet" "public" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -33,6 +51,8 @@ resource "aws_subnet" "public" {
   }
 }
 
+# Internet Gateway
+# Allows communication between the VPC and the internet.
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
@@ -41,6 +61,8 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
+# Public Route Table
+# Routes traffic from public subnets to the Internet Gateway.
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -60,6 +82,9 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# Lambda Security Group
+# Controls traffic to and from the Lambda function.
+# Currently allows all outbound traffic (egress) to reach S3, Vault, etc.
 resource "aws_security_group" "lambda_sg" {
   name        = "${var.project_name}-lambda-sg"
   description = "Security group for Lambda function"
@@ -77,7 +102,9 @@ resource "aws_security_group" "lambda_sg" {
   }
 }
 
-# Security Group for Aurora (allowing access from Lambda)
+# Aurora Security Group
+# Controls traffic to the Aurora database.
+# Explicitly allows ingress on port 5432 (PostgreSQL) ONLY from the Lambda Security Group.
 resource "aws_security_group" "aurora_sg" {
   name        = "${var.project_name}-aurora-sg"
   description = "Security group for Aurora"
@@ -97,6 +124,8 @@ resource "aws_security_group" "aurora_sg" {
 
 data "aws_availability_zones" "available" {}
 
+# Outputs
+# Exposes resource IDs for use in other modules.
 output "vpc_id" {
   value = aws_vpc.main.id
 }

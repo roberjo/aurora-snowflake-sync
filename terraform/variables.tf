@@ -1,3 +1,9 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# VARIABLES
+# ---------------------------------------------------------------------------------------------------------------------
+# This file defines the input variables for the Terraform configuration.
+# These variables allow for customization of the deployment (e.g., region, project name, credentials).
+
 variable "aws_region" {
   description = "AWS Region"
   type        = string
