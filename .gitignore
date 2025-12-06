@@ -99,3 +99,23 @@ temp/
 *.tmp
 *.bak
 *.swp
+node_modules/
+
+# .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userprefs
+*.lock.json
+TestResults/
+*.dll
+*.exe
+*.pdb
+*.cache
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg

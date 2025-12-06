@@ -3,9 +3,17 @@
   "version": "1.0.0",
   "description": "Aurora to Snowflake data exporter lambda",
   "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage"
+  },
   "dependencies": {
     "pg": "^8.11.3",
     "snowflake-sdk": "^1.9.0",
     "node-vault": "^0.10.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.12"
   }
 }
