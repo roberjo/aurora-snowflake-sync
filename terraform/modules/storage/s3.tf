@@ -69,6 +69,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
     id     = "expire-staging-data"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }
+
     expiration {
       days = 30
     }

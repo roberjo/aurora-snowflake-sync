@@ -109,7 +109,7 @@ resource "aws_route_table_association" "public" {
 
 # NAT Gateway to provide controlled egress for private subnets while keeping them non-public.
 resource "aws_eip" "nat" {
-  vpc = true
+  domain = "vpc"
 }
 
 resource "aws_nat_gateway" "main" {
