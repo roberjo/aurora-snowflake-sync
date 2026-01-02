@@ -24,6 +24,17 @@ variable "s3_bucket_url" {
 variable "s3_bucket_id" {
   description = "ID of the S3 bucket to configure event notifications."
 }
+variable "storage_aws_role_arn" {
+  description = "ARN of the AWS IAM role Snowflake will assume for the storage integration."
+}
+
+variable "table_definitions" {
+  description = "Map of staging table names to expected S3 prefixes for auto ingest."
+  type = map(object({
+    prefix = string
+  }))
+  default = {}
+}
 
 # Snowflake Database
 # The container for all schemas and tables related to this project.
@@ -49,10 +60,9 @@ resource "snowflake_storage_integration" "s3_int" {
   enabled = true
 
   storage_provider         = "S3"
-  storage_aws_role_arn     = "arn:aws:iam::123456789012:role/my-snowflake-role" # Placeholder, needs to be created or passed in
-  # In reality, you create the integration, get the STORAGE_AWS_IAM_USER_ARN and STORAGE_AWS_EXTERNAL_ID, 
-  # and then update the AWS IAM Role trust policy. 
-  # For this plan, we assume the role exists or we'd need a two-step apply.
+  storage_aws_role_arn     = var.storage_aws_role_arn
+  # After the integration is created, use the generated STORAGE_AWS_IAM_USER_ARN and
+  # STORAGE_AWS_EXTERNAL_ID outputs to update the AWS IAM role trust policy.
   
   storage_allowed_locations = [var.s3_bucket_url]
 }
@@ -83,20 +93,19 @@ resource "snowflake_stage" "main" {
   file_format = snowflake_file_format.csv_format.name
 }
 
-# Snowpipe
-# Automatically ingests data when a notification is received from S3.
-# Note: This pipe definition is a placeholder example. In a real scenario, you might need
-# dynamic pipe creation or one pipe per table.
-resource "snowflake_pipe" "main" {
+# Pipes
+# Create one pipe per table to route each S3 prefix into the correct staging table.
+resource "snowflake_pipe" "table_pipes" {
+  for_each = var.table_definitions
+
   database = snowflake_database.main.name
   schema   = snowflake_schema.staging.name
-  name     = "AUTO_INGEST_PIPE"
-  
-  comment = "Pipe to auto-ingest data from S3"
+  name     = upper("${each.key}_PIPE")
+
+  comment     = "Auto-ingest for ${each.key}"
   auto_ingest = true
-  
-  # Example copy statement - in reality you might have one pipe per table
-  copy_statement = "COPY INTO ${snowflake_database.main.name}.${snowflake_schema.staging.name}.MY_TABLE FROM @${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_stage.main.name}"
+
+  copy_statement = "COPY INTO ${snowflake_database.main.name}.${snowflake_schema.staging.name}.${each.key} FROM @${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_stage.main.name}/${each.value.prefix} FILE_FORMAT=(FORMAT_NAME=${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_file_format.csv_format.name})"
 }
 
 # Configure S3 to send notifications to Snowpipe SQS
@@ -106,8 +115,13 @@ resource "snowflake_pipe" "main" {
 resource "aws_s3_bucket_notification" "bucket_notification" {
   bucket = var.s3_bucket_id
 
-  queue {
-    queue_arn     = snowflake_pipe.main.notification_channel
-    events        = ["s3:ObjectCreated:*"]
+  dynamic "queue" {
+    for_each = snowflake_pipe.table_pipes
+
+    content {
+      queue_arn     = queue.value.notification_channel
+      events        = ["s3:ObjectCreated:*"]
+      filter_prefix = "${var.table_definitions[queue.key].prefix}/"
+    }
   }
 }

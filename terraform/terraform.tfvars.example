@@ -7,3 +7,9 @@ snowflake_password = "super_secure_password"
 snowflake_role    = "SYSADMIN"
 vault_address     = "https://vault.example.com"
 vault_token       = "s.xxxxxxxx"
+storage_integration_role_arn = "arn:aws:iam::123456789012:role/snowflake-storage-integration"
+# table_definitions can be overridden to align Snowpipe pipes with S3 prefixes
+# table_definitions = {
+#   ORDERS    = { prefix = "orders" }
+#   CUSTOMERS = { prefix = "customers" }
+# }
