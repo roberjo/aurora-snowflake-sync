@@ -9,6 +9,7 @@ This project implements a serverless, batch-oriented data synchronization pipeli
 *   [Operational Runbook](docs/RUNBOOK.md)
 *   [Observability & Monitoring](docs/OBSERVABILITY.md)
 *   [Security](docs/SECURITY.md)
+*   [Export & Sync Process](docs/DATA_SYNC_PROCESS.md)
 *   [FAQ](docs/FAQ.md)
 
 ## Architecture Overview

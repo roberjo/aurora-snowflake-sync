@@ -56,3 +56,19 @@ variable "vault_token" {
   type        = string
   sensitive   = true
 }
+
+variable "storage_integration_role_arn" {
+  description = "AWS IAM role ARN Snowflake should assume for the storage integration."
+  type        = string
+}
+
+variable "table_definitions" {
+  description = "Map of staging table names to S3 prefixes for Snowpipe auto-ingest."
+  type = map(object({
+    prefix = string
+  }))
+  default = {
+    ORDERS    = { prefix = "orders" }
+    CUSTOMERS = { prefix = "customers" }
+  }
+}
