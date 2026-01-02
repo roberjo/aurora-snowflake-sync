@@ -95,6 +95,28 @@ def load_table_config():
     }
 
 
+
+def load_table_config():
+    """
+    Load table configuration from SSM Parameter Store or environment.
+    """
+    param_name = os.environ.get('TABLE_CONFIG_PARAM')
+    if param_name:
+        ssm = boto3.client('ssm')
+        param = ssm.get_parameter(Name=param_name, WithDecryption=True)
+        return json.loads(param['Parameter']['Value'])
+
+    inline_config = os.environ.get('TABLE_CONFIG_JSON')
+    if inline_config:
+        return json.loads(inline_config)
+
+    return {
+        "tables": [
+            {"table_name": "orders", "watermark_col": "updated_at"},
+            {"table_name": "customers", "watermark_col": "updated_at"}
+        ]
+    }
+
 def get_snowflake_watermark(conn_params, table_name, watermark_col):
     """
     Query Snowflake to find the maximum watermark value for the table.
