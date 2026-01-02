@@ -46,17 +46,52 @@ def get_secrets():
     # Retrieve Vault address and token from environment variables
     # These are set in the Lambda configuration
     vault_addr = os.environ.get('VAULT_ADDR')
-    vault_token = os.environ.get('VAULT_TOKEN') # In production, consider using AWS IAM Auth for Vault
+    vault_token = os.environ.get('VAULT_TOKEN')
 
     # Initialize the Vault client
-    client = hvac.Client(url=vault_addr, token=vault_token)
-    
-    # Read the secret from the specific path 'aurora-snowflake-sync'
-    # This path must match where secrets were written in Vault
-    secrets = client.secrets.kv.v2.read_secret_version(path='aurora-snowflake-sync')
-    
+    client = hvac.Client(url=vault_addr)
+
+    if vault_token:
+        client.token = vault_token
+    else:
+        role = os.environ.get('VAULT_ROLE')
+        session = boto3.Session()
+        creds = session.get_credentials().get_frozen_credentials()
+        login = client.auth.aws.iam_login(
+            access_key=creds.access_key,
+            secret_key=creds.secret_key,
+            session_token=creds.token,
+            role=role,
+        )
+        client.token = login["auth"]["client_token"]
+
+    secrets_path = os.environ.get('VAULT_SECRET_PATH', 'aurora-snowflake-sync')
+    secrets = client.secrets.kv.v2.read_secret_version(path=secrets_path)
+
     # Return the actual data dictionary from the response
     return secrets['data']['data']
+
+
+def load_table_config():
+    """
+    Load table configuration from SSM Parameter Store or environment.
+    """
+    param_name = os.environ.get('TABLE_CONFIG_PARAM')
+    if param_name:
+        ssm = boto3.client('ssm')
+        param = ssm.get_parameter(Name=param_name, WithDecryption=True)
+        return json.loads(param['Parameter']['Value'])
+
+    inline_config = os.environ.get('TABLE_CONFIG_JSON')
+    if inline_config:
+        return json.loads(inline_config)
+
+    return {
+        "tables": [
+            {"table_name": "orders", "watermark_col": "updated_at"},
+            {"table_name": "customers", "watermark_col": "updated_at"}
+        ]
+    }
 
 def get_snowflake_watermark(conn_params, table_name, watermark_col):
     """
@@ -165,15 +200,7 @@ def lambda_handler(event, context):
     """
     print("Starting sync process...")
     
-    # Load Config
-    # In a real app, this might come from S3 or Env Vars
-    # Defines which tables to sync and their watermark columns
-    config = {
-        "tables": [
-            {"table_name": "orders", "watermark_col": "updated_at"},
-            {"table_name": "customers", "watermark_col": "updated_at"}
-        ]
-    }
+    config = load_table_config()
     
     s3_bucket = os.environ['S3_BUCKET']
     

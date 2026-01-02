@@ -20,6 +20,25 @@ resource "aws_s3_bucket" "data_lake" {
   }
 }
 
+# Block any form of public access to avoid accidental exposure of exported data.
+resource "aws_s3_bucket_public_access_block" "data_lake" {
+  bucket                  = aws_s3_bucket.data_lake.id
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
+}
+
+# Enforce bucket-level ownership to prevent ACL takeovers and to ensure uploads land
+# under the bucket owner's account by default.
+resource "aws_s3_bucket_ownership_controls" "data_lake" {
+  bucket = aws_s3_bucket.data_lake.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
 # Bucket Versioning
 # Enables versioning to keep a history of object changes and protect against accidental deletions.
 resource "aws_s3_bucket_versioning" "data_lake" {
@@ -37,6 +56,21 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "data_lake" {
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
+    }
+  }
+}
+
+# Apply a simple lifecycle policy so transient staging data is automatically cleaned up
+# after 30 days. Production deployments can tune this window per table if needed.
+resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
+  bucket = aws_s3_bucket.data_lake.id
+
+  rule {
+    id     = "expire-staging-data"
+    status = "Enabled"
+
+    expiration {
+      days = 30
     }
   }
 }
