@@ -15,9 +15,10 @@
 ├── .github/                # GitHub Actions workflows
 ├── config/                 # Application configuration
 ├── docs/                   # Documentation
-├── lambda/                 # Python source code
-│   ├── exporter.py
-│   └── requirements.txt
+├── lambda/
+│   └── python/             # Python source code
+│       ├── exporter.py
+│       └── requirements.txt
 ├── scripts/                # SQL and helper scripts
 ├── terraform/              # Infrastructure as Code
 └── README.md
@@ -30,7 +31,7 @@ Create a virtual environment for Python development:
 ```bash
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r lambda/requirements.txt
+pip install -r lambda/python/requirements.txt
 pip install pytest black flake8
 ```
 
