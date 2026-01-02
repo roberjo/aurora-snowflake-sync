@@ -74,7 +74,7 @@ resource "snowflake_file_format" "csv_format" {
   database    = snowflake_database.main.name
   schema      = snowflake_schema.staging.name
   format_type = "CSV"
-  csv_compression = "AUTO"
+  compression = "AUTO"
   record_delimiter = "\n"
   field_delimiter = ","
   file_extension = "csv"
