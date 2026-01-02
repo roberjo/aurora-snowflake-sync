@@ -33,7 +33,7 @@ variable "vault_address" {
 # This automatically creates a deployment package from the source file.
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_file = "${path.module}/../../lambda/exporter.py"
+  source_file = "${path.module}/../../lambda/python/exporter.py"
   output_path = "${path.module}/exporter.zip"
 }
 
@@ -86,6 +86,15 @@ resource "aws_iam_policy" "lambda_custom" {
           var.s3_bucket_arn,
           "${var.s3_bucket_arn}/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -116,9 +125,11 @@ resource "aws_lambda_function" "exporter" {
 
   environment {
     variables = {
-      S3_BUCKET   = var.s3_bucket_id
-      VAULT_ADDR  = var.vault_address
-      # VAULT_TOKEN would be injected securely, not here in plaintext ideally
+      S3_BUCKET          = var.s3_bucket_id
+      VAULT_ADDR         = var.vault_address
+      VAULT_ROLE         = "${var.project_name}-lambda"
+      VAULT_SECRET_PATH  = "${var.project_name}"
+      TABLE_CONFIG_PARAM = "/${var.project_name}/sync-config"
     }
   }
 }

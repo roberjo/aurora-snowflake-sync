@@ -93,7 +93,9 @@ module "compute" {
 module "snowflake" {
   source = "./modules/snowflake"
 
-  project_name  = var.project_name
-  s3_bucket_url = "s3://${module.storage.bucket_id}/"
-  s3_bucket_id  = module.storage.bucket_id
+  project_name           = var.project_name
+  s3_bucket_url          = "s3://${module.storage.bucket_id}/"
+  s3_bucket_id           = module.storage.bucket_id
+  storage_aws_role_arn   = var.storage_integration_role_arn
+  table_definitions      = var.table_definitions
 }
