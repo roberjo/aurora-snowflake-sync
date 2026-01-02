@@ -38,7 +38,8 @@ graph LR
 
 1.  **Trigger**: AWS EventBridge triggers the `exporter` Lambda function on a configurable schedule (e.g., hourly).
 2.  **Orchestration (Lambda)**:
-    *   Authenticates with Hashicorp Vault to retrieve database credentials.
+    *   Pulls table sync metadata from AWS Systems Manager Parameter Store so table lists and watermarks are configurable without redeploying the function.
+    *   Authenticates with Hashicorp Vault using AWS IAM auth (no long-lived tokens) to retrieve database credentials.
     *   Connects to Snowflake to query the maximum `updated_at` timestamp (watermark) for each configured table.
     *   Connects to Aurora PostgreSQL.
     *   Executes the `aws_s3.query_export_to_s3` function to export records where `updated_at > watermark`.
@@ -66,15 +67,16 @@ graph LR
 ### AWS S3
 *   **Role**: Intermediate storage / Data Lake.
 *   **Lifecycle Policy**: Files can be transitioned to Glacier or expired after ingestion (e.g., 7 days) to save costs.
+*   **Guardrails**: Bucket ownership enforcement, public access blocks, and default SSE ensure staging data is not exposed.
 
 ### Snowflake
-*   **Storage Integration**: Securely connects to S3 without long-lived credentials.
-*   **Snowpipe**: Provides near-instant ingestion once files land in S3.
+*   **Storage Integration**: Securely connects to S3 without long-lived credentials and uses a dedicated IAM role passed in via Terraform.
+*   **Snowpipe**: Provides near-instant ingestion once files land in S3 with one pipe per table/prefix.
 *   **Tasks**: Automates SQL-based transformations.
 
 ## Security Model
-*   **Network**: Lambda runs inside a private VPC subnet. Security Groups allow outbound access to Aurora (port 5432) and HTTPS access to S3/Snowflake/Vault (via NAT Gateway or VPC Endpoints).
-*   **Secrets**: All credentials stored in Hashicorp Vault. Lambda retrieves them at runtime.
+*   **Network**: Lambda runs inside private subnets with an S3 VPC endpoint and NAT egress for HTTPS-only traffic.
+*   **Secrets**: All credentials stored in Hashicorp Vault. Lambda retrieves them at runtime via IAM auth when possible.
 *   **IAM**: Least-privilege roles for Lambda (S3 write, Aurora connect) and Snowflake (S3 read).
 
 ## Scalability

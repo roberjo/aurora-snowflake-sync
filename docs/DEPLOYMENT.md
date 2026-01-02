@@ -38,7 +38,7 @@ To ensure all dependencies (like `psycopg2` binary) work on AWS Lambda (Amazon L
 ### Packaging Script
 ```bash
 # scripts/package_lambda.sh
-docker run --rm -v $(pwd):/var/task public.ecr.aws/sam/build-python3.9:latest /bin/sh -c "pip install -r lambda/requirements.txt -t lambda/ && cd lambda && zip -r ../exporter.zip ."
+docker run --rm -v $(pwd):/var/task public.ecr.aws/sam/build-python3.9:latest /bin/sh -c "pip install -r lambda/python/requirements.txt -t lambda/python/ && cd lambda/python && zip -r ../../terraform/modules/compute/exporter.zip ."
 ```
 
 ## Environment Strategy
