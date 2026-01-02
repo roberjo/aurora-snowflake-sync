@@ -7,10 +7,10 @@
 terraform {
   required_providers {
     snowflake = {
-      source  = "Snowflake-Labs/snowflake"
+      source = "Snowflake-Labs/snowflake"
     }
     aws = {
-      source  = "hashicorp/aws"
+      source = "hashicorp/aws"
     }
   }
 }
@@ -59,38 +59,38 @@ resource "snowflake_storage_integration" "s3_int" {
 
   enabled = true
 
-  storage_provider         = "S3"
-  storage_aws_role_arn     = var.storage_aws_role_arn
+  storage_provider     = "S3"
+  storage_aws_role_arn = var.storage_aws_role_arn
   # After the integration is created, use the generated STORAGE_AWS_IAM_USER_ARN and
   # STORAGE_AWS_EXTERNAL_ID outputs to update the AWS IAM role trust policy.
-  
+
   storage_allowed_locations = [var.s3_bucket_url]
 }
 
 # File Format
 # Defines how the CSV files in S3 should be parsed (delimiters, headers, etc.).
 resource "snowflake_file_format" "csv_format" {
-  name        = "CSV_FORMAT"
-  database    = snowflake_database.main.name
-  schema      = snowflake_schema.staging.name
-  format_type = "CSV"
-  csv_compression = "AUTO"
+  name             = "CSV_FORMAT"
+  database         = snowflake_database.main.name
+  schema           = snowflake_schema.staging.name
+  format_type      = "CSV"
+  compression      = "AUTO"
   record_delimiter = "\n"
-  field_delimiter = ","
-  file_extension = "csv"
-  skip_header = 1
+  field_delimiter  = ","
+  file_extension   = "csv"
+  skip_header      = 1
 }
 
 # External Stage
 # A named stage object that references the S3 bucket via the storage integration.
 # This simplifies loading commands by referring to '@S3_STAGE' instead of the full URL and credentials.
 resource "snowflake_stage" "main" {
-  name        = "S3_STAGE"
-  url         = var.s3_bucket_url
-  database    = snowflake_database.main.name
-  schema      = snowflake_schema.staging.name
+  name                = "S3_STAGE"
+  url                 = var.s3_bucket_url
+  database            = snowflake_database.main.name
+  schema              = snowflake_schema.staging.name
   storage_integration = snowflake_storage_integration.s3_int.name
-  file_format = snowflake_file_format.csv_format.name
+  file_format         = snowflake_file_format.csv_format.name
 }
 
 # Pipes

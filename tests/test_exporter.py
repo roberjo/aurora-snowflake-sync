@@ -1,7 +1,8 @@
-import pytest
-from unittest.mock import MagicMock, patch
 import os
 import sys
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 """
 Exporter Lambda Unit Tests
@@ -15,8 +16,8 @@ Purpose:
     works as expected without needing actual database connections.
 """
 
-# Add lambda dir to path to allow importing the lambda code
-sys.path.append(os.path.join(os.path.dirname(__file__), '../lambda'))
+# Add lambda module path so tests can import the handler.
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "lambda", "python"))
 
 from exporter import lambda_handler
 

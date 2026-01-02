@@ -11,12 +11,12 @@ variable "project_name" {
 variable "vpc_id" {
   description = "ID of the VPC where the Lambda will run."
 }
-variable "subnet_ids" { 
-  type = list(string) 
+variable "subnet_ids" {
+  type        = list(string)
   description = "List of private subnet IDs for the Lambda function."
 }
-variable "security_group_ids" { 
-  type = list(string) 
+variable "security_group_ids" {
+  type        = list(string)
   description = "List of security group IDs to attach to the Lambda."
 }
 variable "s3_bucket_id" {

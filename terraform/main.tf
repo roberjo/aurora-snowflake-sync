@@ -58,8 +58,8 @@ provider "vault" {
 # to run securely and connect to other resources.
 module "network" {
   source = "./modules/network"
-  
-  vpc_cidr = var.vpc_cidr
+
+  vpc_cidr     = var.vpc_cidr
   project_name = var.project_name
 }
 
@@ -68,7 +68,7 @@ module "network" {
 # before it is loaded into Snowflake.
 module "storage" {
   source = "./modules/storage"
-  
+
   project_name = var.project_name
 }
 
@@ -93,9 +93,9 @@ module "compute" {
 module "snowflake" {
   source = "./modules/snowflake"
 
-  project_name           = var.project_name
-  s3_bucket_url          = "s3://${module.storage.bucket_id}/"
-  s3_bucket_id           = module.storage.bucket_id
-  storage_aws_role_arn   = var.storage_integration_role_arn
-  table_definitions      = var.table_definitions
+  project_name         = var.project_name
+  s3_bucket_url        = "s3://${module.storage.bucket_id}/"
+  s3_bucket_id         = module.storage.bucket_id
+  storage_aws_role_arn = var.storage_integration_role_arn
+  table_definitions    = var.table_definitions
 }
