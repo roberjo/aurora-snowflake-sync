@@ -14,9 +14,14 @@ output "s3_bucket_id" {
   value       = module.storage.bucket_id
 }
 
-output "lambda_function_name" {
-  description = "The name of the Lambda function"
-  value       = "${var.project_name}-exporter"
+output "dms_replication_instance_arn" {
+  description = "DMS replication instance ARN"
+  value       = module.dms.replication_instance_arn
+}
+
+output "dms_replication_task_arn" {
+  description = "DMS replication task ARN"
+  value       = module.dms.replication_task_arn
 }
 
 output "snowflake_storage_integration" {

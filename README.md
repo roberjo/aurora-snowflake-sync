@@ -1,6 +1,6 @@
 # Aurora to Snowflake Sync
 
-This project implements a serverless, batch-oriented data synchronization pipeline from AWS Aurora PostgreSQL to Snowflake.
+This project implements a CDC-driven data synchronization pipeline from AWS Aurora PostgreSQL to Snowflake.
 
 ## Documentation
 *   [Architecture Design](docs/ARCHITECTURE.md)
@@ -14,8 +14,8 @@ This project implements a serverless, batch-oriented data synchronization pipeli
 
 ## Architecture Overview
 
-1.  **Orchestrator**: AWS Lambda (triggered by EventBridge).
-2.  **Extraction**: Aurora `aws_s3` extension exports incremental data to S3.
+1.  **Change Capture**: AWS DMS (CDC from Aurora PostgreSQL).
+2.  **Delivery**: DMS writes CDC files to S3.
 3.  **Staging**: S3 Bucket.
 4.  **Ingestion**: Snowflake Snowpipe (Auto-Ingest).
 5.  **Transformation**: Snowflake Tasks (Merge/Deduplicate).
@@ -26,16 +26,6 @@ This project implements a serverless, batch-oriented data synchronization pipeli
 *   Terraform >= 1.0
 *   AWS Account
 *   Snowflake Account
-*   Hashicorp Vault
-
-### Quality & Security
-
-### Testing
-Run unit tests to verify logic:
-```bash
-pip install pytest
-pytest tests/
-```
 
 ### Validation
 Validate Terraform configuration:
@@ -48,24 +38,10 @@ terraform validate
 *   **Secrets**: Run `gitleaks detect` to ensure no credentials are committed.
 *   **IaC Security**: Run `checkov -d terraform/` to scan for infrastructure misconfigurations.
 
-## Configuration
-
-Edit `config/sync_config.json` to add tables:
-```json
-{
-  "tables": [
-    {
-      "table_name": "public.orders",
-      "watermark_col": "updated_at"
-    }
-  ]
-}
-```
-
 ### Setup
 1.  **Configure Variables**: Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars`.
 2.  **Deploy Infrastructure**: `terraform apply`.
-3.  **Configure Aurora**: Enable `aws_s3` extension.
+3.  **Configure Aurora**: Enable logical replication for DMS CDC.
 4.  **Deploy Snowflake Objects**: Run `scripts/setup_snowflake.sql`.
 
 See [Developer Guide](docs/DEVELOPER_GUIDE.md) for detailed setup instructions.

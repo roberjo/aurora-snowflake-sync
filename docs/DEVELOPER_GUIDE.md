@@ -3,9 +3,7 @@
 ## Getting Started
 
 ### Prerequisites
-*   **Python**: 3.9+
 *   **Terraform**: 1.0+
-*   **Docker**: For local Lambda testing (optional).
 *   **AWS CLI**: Configured with dev credentials.
 *   **SnowSQL**: For Snowflake interaction.
 
@@ -13,12 +11,10 @@
 ```
 .
 ├── .github/                # GitHub Actions workflows
-├── config/                 # Application configuration
 ├── docs/                   # Documentation
-├── lambda/
-│   └── python/             # Python source code
-│       ├── exporter.py
-│       └── requirements.txt
+├── terraform/
+│   └── modules/
+│       └── dms/             # DMS CDC resources
 ├── scripts/                # SQL and helper scripts
 ├── terraform/              # Infrastructure as Code
 └── README.md
@@ -26,46 +22,11 @@
 
 ## Local Development
 
-### 1. Environment Setup
-Create a virtual environment for Python development:
-```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r lambda/python/requirements.txt
-pip install pytest black flake8
-```
-
 ## Testing & Quality Assurance
-
-### 1. Unit Tests
-We use `pytest` for unit testing the Python Lambda code.
-
-**Run Tests:**
-```bash
-pytest tests/
-```
-
-**Expected Output:**
-```text
-================= test session starts ==================
-platform win32 -- Python 3.9.x, pytest-7.x, pluggy-1.x
-rootdir: D:\Github\aurora-snowflake-sync
-collected 5 items
-
-tests\test_config.py .                                   [ 20%]
-tests\test_exporter.py ....                              [100%]
-
-================== 5 passed in 0.45s ===================
-```
+No automated application tests are defined for the CDC pipeline. Validate changes via Terraform validation and Snowflake smoke checks.
 
 ### 2. Linting
-Ensure code quality with `flake8` (logic) and `black` (formatting).
-
-**Run Linting:**
-```bash
-flake8 lambda/
-black --check lambda/
-```
+Ensure Terraform is formatted with `terraform fmt` before opening a PR.
 
 ### 3. Terraform Validation
 Validate the syntax and configuration of Infrastructure as Code.
