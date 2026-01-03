@@ -2,7 +2,7 @@
 # ROOT MODULE
 # ---------------------------------------------------------------------------------------------------------------------
 # This is the entry point for the Terraform configuration.
-# It defines the required providers (AWS, Snowflake, Vault) and orchestrates the deployment
+# It defines the required providers (AWS, Snowflake) and orchestrates the deployment
 # by calling child modules for Network, Storage, Compute, and Snowflake resources.
 
 terraform {
@@ -15,7 +15,7 @@ terraform {
   }
 
   required_providers {
-    # AWS Provider: Used to create VPC, Lambda, S3, etc.
+    # AWS Provider: Used to create VPC, DMS, S3, etc.
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
@@ -24,11 +24,6 @@ terraform {
     snowflake = {
       source  = "Snowflake-Labs/snowflake"
       version = "~> 0.87"
-    }
-    # Vault Provider: Used to interact with Hashicorp Vault for secrets management
-    vault = {
-      source  = "hashicorp/vault"
-      version = "~> 3.25"
     }
   }
 }
@@ -44,17 +39,12 @@ provider "snowflake" {
   role     = var.snowflake_role
 }
 
-provider "vault" {
-  address = var.vault_address
-  token   = var.vault_token
-}
-
 # ---------------------------------------------------------------------------------------------------------------------
 # MODULES
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Network Module
-# Creates the VPC, Subnets, and Security Groups required for the Lambda function
+# Creates the VPC, Subnets, and Security Groups required for DMS
 # to run securely and connect to other resources.
 module "network" {
   source = "./modules/network"
@@ -72,19 +62,24 @@ module "storage" {
   project_name = var.project_name
 }
 
-# Compute Module
-# Deploys the AWS Lambda function that orchestrates the sync process.
-# It needs access to the VPC (to reach Vault/Aurora) and S3 (to write data).
-module "compute" {
-  source = "./modules/compute"
+module "dms" {
+  source = "./modules/dms"
 
-  project_name       = var.project_name
-  vpc_id             = module.network.vpc_id
-  subnet_ids         = module.network.private_subnet_ids
-  security_group_ids = [module.network.lambda_sg_id]
-  s3_bucket_id       = module.storage.bucket_id
-  s3_bucket_arn      = module.storage.bucket_arn
-  vault_address      = var.vault_address
+  project_name             = var.project_name
+  subnet_ids               = module.network.private_subnet_ids
+  security_group_ids       = [module.network.dms_sg_id]
+  aurora_endpoint          = var.aurora_endpoint
+  aurora_port              = var.aurora_port
+  aurora_database          = var.aurora_database
+  aurora_username          = var.aurora_username
+  aurora_password          = var.aurora_password
+  s3_bucket_name           = module.storage.bucket_id
+  s3_prefix                = var.dms_s3_prefix
+  replication_instance_class = var.dms_replication_instance_class
+  allocated_storage        = var.dms_allocated_storage
+  multi_az                 = var.dms_multi_az
+  table_mappings           = var.dms_table_mappings
+  replication_task_settings = var.dms_replication_task_settings
 }
 
 # Snowflake Module

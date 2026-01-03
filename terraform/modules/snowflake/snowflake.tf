@@ -29,7 +29,7 @@ variable "storage_aws_role_arn" {
 }
 
 variable "table_definitions" {
-  description = "Map of staging table names to expected S3 prefixes for auto ingest."
+  description = "Map of CDC staging table names to expected S3 prefixes for auto ingest."
   type = map(object({
     prefix = string
   }))
@@ -69,16 +69,12 @@ resource "snowflake_storage_integration" "s3_int" {
 
 # File Format
 # Defines how the CSV files in S3 should be parsed (delimiters, headers, etc.).
-resource "snowflake_file_format" "csv_format" {
-  name             = "CSV_FORMAT"
-  database         = snowflake_database.main.name
-  schema           = snowflake_schema.staging.name
-  format_type      = "CSV"
-  compression      = "AUTO"
-  record_delimiter = "\n"
-  field_delimiter  = ","
-  file_extension   = "csv"
-  skip_header      = 1
+resource "snowflake_file_format" "parquet_format" {
+  name        = "PARQUET_FORMAT"
+  database    = snowflake_database.main.name
+  schema      = snowflake_schema.staging.name
+  format_type = "PARQUET"
+  compression = "AUTO"
 }
 
 # External Stage
@@ -90,7 +86,7 @@ resource "snowflake_stage" "main" {
   database            = snowflake_database.main.name
   schema              = snowflake_schema.staging.name
   storage_integration = snowflake_storage_integration.s3_int.name
-  file_format         = snowflake_file_format.csv_format.name
+  file_format         = snowflake_file_format.parquet_format.name
 }
 
 # Pipes
@@ -105,7 +101,7 @@ resource "snowflake_pipe" "table_pipes" {
   comment     = "Auto-ingest for ${each.key}"
   auto_ingest = true
 
-  copy_statement = "COPY INTO ${snowflake_database.main.name}.${snowflake_schema.staging.name}.${each.key} FROM @${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_stage.main.name}/${each.value.prefix} FILE_FORMAT=(FORMAT_NAME=${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_file_format.csv_format.name})"
+  copy_statement = "COPY INTO ${snowflake_database.main.name}.${snowflake_schema.staging.name}.${each.key} FROM @${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_stage.main.name}/${each.value.prefix} FILE_FORMAT=(FORMAT_NAME=${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_file_format.parquet_format.name})"
 }
 
 # Configure S3 to send notifications to Snowpipe SQS

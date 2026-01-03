@@ -1,31 +1,30 @@
 # Observability & Monitoring
 
 ## Logging Strategy
-*   **Lambda**: All logs sent to CloudWatch Logs.
-    *   **Log Group**: `/aws/lambda/aurora-snowflake-sync-exporter`
-    *   **Format**: JSON structured logging (recommended) for easy parsing.
+*   **DMS**: Task logs sent to CloudWatch Logs.
+    *   **Log Group**: `/aws/dms/task/<task-id>`
     *   **Retention**: 30 Days.
 *   **Snowflake**:
     *   **COPY_HISTORY**: Tracks file ingestion status.
     *   **TASK_HISTORY**: Tracks Merge task execution.
-    *   **QUERY_HISTORY**: Tracks export query performance (on Aurora side via `pg_stat_activity` if needed).
+    *   **QUERY_HISTORY**: Tracks CDC merge performance.
 
 ## Metrics
 We track the following Key Performance Indicators (KPIs):
 
 | Metric | Source | Threshold (Warning/Critical) | Description |
 | :--- | :--- | :--- | :--- |
-| **Lambda Errors** | CloudWatch | > 0 / > 5 | Function execution failures. |
-| **Lambda Duration** | CloudWatch | > 60s / > 250s | Time taken to export data. |
-| **Sync Latency** | Custom (Snowflake) | > 2h / > 6h | Time diff between `MAX(updated_at)` in Aurora vs Snowflake. |
+| **DMS Task Errors** | CloudWatch | > 0 / > 5 | Replication task failures. |
+| **DMS CDC Latency** | CloudWatch | > 10m / > 60m | Source-to-target latency. |
+| **Sync Latency** | Custom (Snowflake) | > 2h / > 6h | Time diff between latest CDC commit timestamp in S3 and Snowflake. |
 | **Snowpipe Failures** | Snowflake | > 0 | Files failing to load. |
 
 ## Alerting
 Alerts are managed via CloudWatch Alarms and Snowflake Alerts, routed to PagerDuty/Slack.
 
 ### CloudWatch Alarms
-1.  **LambdaErrorAlarm**: Triggers if `Errors > 0` in 5 minutes.
-2.  **LambdaTimeoutAlarm**: Triggers if `Duration > 290s` (approaching 300s limit).
+1.  **DmsTaskErrorAlarm**: Triggers if replication task errors > 0.
+2.  **DmsLatencyAlarm**: Triggers if CDC latency exceeds threshold.
 
 ### Snowflake Alerts (Email/Slack)
 Create a Snowflake Alert to check for pipe failures:
@@ -35,7 +34,7 @@ CREATE OR REPLACE ALERT PIPE_FAILURE_ALERT
   SCHEDULE = '60 MINUTE'
   IF (EXISTS (
       SELECT * FROM TABLE(INFORMATION_SCHEMA.COPY_HISTORY(
-        TABLE_NAME=>'STAGING.ORDERS', 
+        TABLE_NAME=>'STAGING.ORDERS_CDC',
         START_TIME=>DATEADD(hour, -1, CURRENT_TIMESTAMP())))
       WHERE STATUS = 'LOAD_FAILED'
   ))
@@ -44,7 +43,7 @@ CREATE OR REPLACE ALERT PIPE_FAILURE_ALERT
 
 ## Dashboards
 A **Grafana** or **CloudWatch Dashboard** should be created with:
-1.  Lambda Invocation Count & Error Rate.
-2.  Average Export Duration.
+1.  DMS Task Status & Error Rate.
+2.  CDC Latency (source → S3).
 3.  S3 Bucket Size / Object Count (Daily Growth).
 4.  Snowflake Credit Usage (Pipe + Tasks).

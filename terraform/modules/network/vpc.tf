@@ -27,7 +27,7 @@ resource "aws_vpc" "main" {
 }
 
 # Private Subnets
-# Used for resources that should not be directly accessible from the internet (e.g., Lambda, Databases).
+# Used for resources that should not be directly accessible from the internet (e.g., DMS, Databases).
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -49,7 +49,7 @@ resource "aws_route_table" "private" {
 }
 
 # Default route keeps generic HTTPS traffic flowing through a managed NAT rather than
-# exposing the Lambda subnets directly to the internet gateway.
+# exposing the private subnets directly to the internet gateway.
 resource "aws_route" "private_nat" {
   route_table_id         = aws_route_table.private.id
   destination_cidr_block = "0.0.0.0/0"
@@ -64,7 +64,7 @@ resource "aws_route_table_association" "private" {
 
 # Public Subnets
 # Used for resources that need direct internet access (e.g., Load Balancers, NAT Gateways).
-# In this architecture, they might be used for NAT Gateways if the Lambda needs outbound internet access.
+# In this architecture, they are used for NAT Gateways.
 resource "aws_subnet" "public" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -123,16 +123,23 @@ resource "aws_nat_gateway" "main" {
   }
 }
 
-# Lambda Security Group
-# Controls traffic to and from the Lambda function.
-# Currently allows all outbound traffic (egress) to reach S3, Vault, etc.
-resource "aws_security_group" "lambda_sg" {
-  name        = "${var.project_name}-lambda-sg"
-  description = "Security group for Lambda function"
+# DMS Security Group
+# Allows DMS replication instances to reach Aurora and S3 endpoints.
+resource "aws_security_group" "dms_sg" {
+  name        = "${var.project_name}-dms-sg"
+  description = "Security group for DMS replication"
   vpc_id      = aws_vpc.main.id
 
   egress {
-    description = "HTTPS egress to services (Vault/Snowflake endpoints)"
+    description = "PostgreSQL egress to Aurora"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+
+  egress {
+    description = "HTTPS egress to AWS services"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -140,13 +147,13 @@ resource "aws_security_group" "lambda_sg" {
   }
 
   tags = {
-    Name = "${var.project_name}-lambda-sg"
+    Name = "${var.project_name}-dms-sg"
   }
 }
 
 # Aurora Security Group
 # Controls traffic to the Aurora database.
-# Explicitly allows ingress on port 5432 (PostgreSQL) ONLY from the Lambda Security Group.
+# Explicitly allows ingress on port 5432 (PostgreSQL) ONLY from the DMS Security Group.
 resource "aws_security_group" "aurora_sg" {
   name        = "${var.project_name}-aurora-sg"
   description = "Security group for Aurora"
@@ -156,7 +163,9 @@ resource "aws_security_group" "aurora_sg" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.lambda_sg.id]
+    security_groups = [
+      aws_security_group.dms_sg.id
+    ]
   }
 
   tags = {
@@ -187,8 +196,8 @@ output "private_subnet_ids" {
   value = aws_subnet.private[*].id
 }
 
-output "lambda_sg_id" {
-  value = aws_security_group.lambda_sg.id
+output "dms_sg_id" {
+  value = aws_security_group.dms_sg.id
 }
 
 output "aurora_sg_id" {

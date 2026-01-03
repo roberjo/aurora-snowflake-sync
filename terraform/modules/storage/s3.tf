@@ -79,7 +79,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
 # but we need to ensure the bucket exists first.
 
 # Outputs
-# Exposes the bucket name and ARN for use in other modules (e.g., Lambda permissions, Snowflake integration).
+# Exposes the bucket name and ARN for use in other modules (e.g., DMS permissions, Snowflake integration).
 output "bucket_id" {
   value = aws_s3_bucket.data_lake.id
 }
