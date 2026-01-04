@@ -29,9 +29,21 @@ variable "storage_aws_role_arn" {
 }
 
 variable "table_definitions" {
-  description = "Map of CDC staging table names to expected S3 prefixes for auto ingest."
+  description = "Map of table configs to wire Snowpipe + merge tasks."
   type = map(object({
-    prefix = string
+    prefix        = string
+    staging_table = string
+    final_table   = string
+    primary_keys  = list(string)
+    columns = list(object({
+      name = string
+      type = string
+    }))
+    metadata = object({
+      operation_column        = string
+      commit_timestamp_column = string
+    })
+    task_schedule = string
   }))
   default = {}
 }
@@ -47,6 +59,18 @@ resource "snowflake_database" "main" {
 resource "snowflake_schema" "staging" {
   database = snowflake_database.main.name
   name     = "STAGING"
+}
+
+resource "snowflake_schema" "final" {
+  database = snowflake_database.main.name
+  name     = "FINAL"
+}
+
+resource "snowflake_warehouse" "ingest" {
+  name            = upper("${var.project_name}_INGEST_WH")
+  warehouse_size  = "XSMALL"
+  auto_suspend    = 60
+  auto_resume     = true
 }
 
 # Storage Integration
@@ -89,19 +113,124 @@ resource "snowflake_stage" "main" {
   file_format         = snowflake_file_format.parquet_format.name
 }
 
-# Pipes
-# Create one pipe per table to route each S3 prefix into the correct staging table.
-resource "snowflake_pipe" "table_pipes" {
-  for_each = var.table_definitions
+locals {
+  table_configs = {
+    for name, def in var.table_definitions :
+    name => {
+      prefix        = def.prefix
+      staging_table = upper(def.staging_table)
+      final_table   = upper(def.final_table)
+      op_col        = upper(def.metadata.operation_column)
+      commit_col    = upper(def.metadata.commit_timestamp_column)
+      primary_keys  = [for pk in def.primary_keys : upper(pk)]
+      staging_columns = [
+        for col in def.columns : {
+          name = upper(col.name)
+          type = col.type
+        }
+      ]
+      final_columns = [
+        for col in def.columns : {
+          name = upper(col.name)
+          type = col.type
+        } if upper(col.name) != upper(def.metadata.operation_column)
+      ]
+      task_schedule = def.task_schedule
+    }
+  }
+}
+
+locals {
+  merge_statements = {
+    for name, cfg in local.table_configs :
+    name => format(
+      "MERGE INTO %s.%s.%s AS T USING (SELECT * FROM %s.%s.%s QUALIFY ROW_NUMBER() OVER (PARTITION BY %s ORDER BY %s DESC) = 1) AS S ON %s WHEN MATCHED AND S.%s = 'D' THEN DELETE WHEN MATCHED AND S.%s IN ('U','I') THEN UPDATE SET %s WHEN NOT MATCHED AND S.%s IN ('I','U') THEN INSERT (%s) VALUES (%s)",
+      snowflake_database.main.name,
+      snowflake_schema.final.name,
+      cfg.final_table,
+      snowflake_database.main.name,
+      snowflake_schema.staging.name,
+      cfg.staging_table,
+      join(", ", cfg.primary_keys),
+      cfg.commit_col,
+      join(" AND ", [for pk in cfg.primary_keys : "T.${pk} = S.${pk}"]),
+      cfg.op_col,
+      cfg.op_col,
+      join(", ", [for col in cfg.final_columns : "T.${col.name} = S.${col.name}" if !(col.name in cfg.primary_keys)]),
+      cfg.op_col,
+      join(", ", [for col in cfg.final_columns : col.name]),
+      join(", ", [for col in cfg.final_columns : "S.${col.name}"])
+    )
+  }
+}
+
+resource "snowflake_table" "staging_tables" {
+  for_each = local.table_configs
 
   database = snowflake_database.main.name
   schema   = snowflake_schema.staging.name
-  name     = upper("${each.key}_PIPE")
+  name     = each.value.staging_table
 
-  comment     = "Auto-ingest for ${each.key}"
+  dynamic "column" {
+    for_each = each.value.staging_columns
+
+    content {
+      name = column.value.name
+      type = column.value.type
+    }
+  }
+}
+
+resource "snowflake_table" "final_tables" {
+  for_each = local.table_configs
+
+  database = snowflake_database.main.name
+  schema   = snowflake_schema.final.name
+  name     = each.value.final_table
+
+  dynamic "column" {
+    for_each = each.value.final_columns
+
+    content {
+      name = column.value.name
+      type = column.value.type
+    }
+  }
+}
+
+# Pipes
+# Create one pipe per table to route each S3 prefix into the correct staging table.
+resource "snowflake_pipe" "table_pipes" {
+  for_each = local.table_configs
+
+  database = snowflake_database.main.name
+  schema   = snowflake_schema.staging.name
+  name     = upper("${each.value.staging_table}_PIPE")
+
+  comment     = "Auto-ingest for ${each.value.staging_table}"
   auto_ingest = true
 
-  copy_statement = "COPY INTO ${snowflake_database.main.name}.${snowflake_schema.staging.name}.${each.key} FROM @${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_stage.main.name}/${each.value.prefix} FILE_FORMAT=(FORMAT_NAME=${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_file_format.parquet_format.name})"
+  copy_statement = "COPY INTO ${snowflake_database.main.name}.${snowflake_schema.staging.name}.${each.value.staging_table} FROM @${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_stage.main.name}/${each.value.prefix} FILE_FORMAT=(FORMAT_NAME=${snowflake_database.main.name}.${snowflake_schema.staging.name}.${snowflake_file_format.parquet_format.name})"
+
+  depends_on = [snowflake_table.staging_tables]
+}
+
+resource "snowflake_task" "merge_tasks" {
+  for_each = local.table_configs
+
+  database = snowflake_database.main.name
+  schema   = snowflake_schema.staging.name
+  name     = upper("${each.value.final_table}_MERGE_TASK")
+
+  warehouse     = snowflake_warehouse.ingest.name
+  schedule      = each.value.task_schedule
+  sql_statement = local.merge_statements[each.key]
+  enabled       = true
+
+  depends_on = [
+    snowflake_table.staging_tables,
+    snowflake_table.final_tables
+  ]
 }
 
 # Configure S3 to send notifications to Snowpipe SQS
@@ -117,7 +246,7 @@ resource "aws_s3_bucket_notification" "bucket_notification" {
     content {
       queue_arn     = queue.value.notification_channel
       events        = ["s3:ObjectCreated:*"]
-      filter_prefix = "${var.table_definitions[queue.key].prefix}/"
+      filter_prefix = "${local.table_configs[queue.key].prefix}/"
     }
   }
 }

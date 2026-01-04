@@ -1,69 +1,30 @@
-name: CI
+name: ci
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [main, develop, feature/**]
   pull_request:
-    branches: [ "main", "develop" ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.9"
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest black
-
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 lambda/python --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 lambda/python --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
-    - name: Check formatting with Black
-      run: |
-        black --check lambda/python
-
-    # - name: Test with pytest
-    #   run: |
-    #     pytest
-
-    - name: Package Lambda
-      run: |
-        mkdir -p build/package
-        python -m pip install -r lambda/python/requirements.txt -t build/package
-        cp lambda/python/exporter.py build/package/
-        cd build/package
-        zip -r ../exporter.zip .
-    
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: lambda-package
-        path: build/exporter.zip
-
-  terraform-validate:
+  terraform:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./terraform
-
+        working-directory: terraform
     steps:
-    - uses: actions/checkout@v4
-    - uses: hashicorp/setup-terraform@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Terraform Init
-      run: terraform init -backend=false
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+          terraform_wrapper: false
 
-    - name: Terraform Validate
-      run: terraform validate
+      - name: Format check
+        run: terraform fmt -check
+
+      - name: Validate
+        run: |
+          terraform init -backend=false
+          terraform validate

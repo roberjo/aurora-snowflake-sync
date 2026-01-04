@@ -33,6 +33,16 @@ variable "aurora_password" {
   description = "Aurora PostgreSQL replication password"
   sensitive   = true
 }
+variable "kms_key_arn" {
+  description = "KMS key ARN for encrypting the replication instance and storage."
+  type        = string
+  default     = null
+}
+variable "log_retention_days" {
+  description = "CloudWatch log retention for DMS task logs."
+  type        = number
+  default     = 30
+}
 variable "s3_bucket_name" {
   description = "Target S3 bucket for CDC files."
 }
@@ -51,7 +61,7 @@ variable "allocated_storage" {
 variable "multi_az" {
   description = "Enable Multi-AZ for the replication instance."
   type        = bool
-  default     = false
+  default     = true
 }
 variable "table_mappings" {
   description = "DMS table mappings JSON string."
@@ -63,7 +73,32 @@ variable "replication_task_settings" {
   default     = <<SETTINGS
 {
   "Logging": {
-    "EnableLogging": true
+    "EnableLogging": true,
+    "LogComponents": [
+      { "Id": "SOURCE_CAPTURE", "Severity": "LOGGER_SEVERITY_DEFAULT" },
+      { "Id": "TARGET_APPLY", "Severity": "LOGGER_SEVERITY_DEFAULT" }
+    ]
+  },
+  "ValidationSettings": {
+    "EnableValidation": true,
+    "ValidationMode": "RowLevel"
+  },
+  "ErrorBehavior": {
+    "DataErrorPolicy": "LOG_ERROR",
+    "DataTruncationErrorPolicy": "LOG_ERROR",
+    "TableErrorPolicy": "SUSPEND_TABLE",
+    "RecoverableErrorCount": -1,
+    "RecoverableErrorInterval": 5,
+    "RecoverableErrorThrottling": true,
+    "RecoverableErrorThrottlingMax": 1800,
+    "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+    "FailOnNoTablesCaptured": true
+  },
+  "FullLoadSettings": {
+    "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+    "StopTaskCachedChangesApplied": true,
+    "StopTaskCachedChangesNotApplied": false,
+    "MaxFullLoadSubTasks": 8
   }
 }
 SETTINGS
@@ -122,6 +157,7 @@ resource "aws_dms_replication_instance" "main" {
   allocated_storage           = var.allocated_storage
   publicly_accessible         = false
   multi_az                    = var.multi_az
+  kms_key_arn                 = var.kms_key_arn
   vpc_security_group_ids      = var.security_group_ids
   replication_subnet_group_id = aws_dms_replication_subnet_group.main.id
 }
@@ -163,6 +199,47 @@ resource "aws_dms_replication_task" "cdc" {
   target_endpoint_arn       = aws_dms_endpoint.target.endpoint_arn
   table_mappings            = var.table_mappings
   replication_task_settings = var.replication_task_settings
+}
+
+resource "aws_cloudwatch_log_group" "dms_task" {
+  name              = "/aws/dms/task/${aws_dms_replication_task.cdc.replication_task_id}"
+  retention_in_days = var.log_retention_days
+}
+
+resource "aws_cloudwatch_metric_alarm" "cdc_latency_warning" {
+  alarm_name          = "${var.project_name}-cdc-latency-warning"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CDCLatencySource"
+  namespace           = "AWS/DMS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 600
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ReplicationTaskIdentifier = aws_dms_replication_task.cdc.replication_task_id
+  }
+
+  alarm_description = "Warn if CDC source latency exceeds 10 minutes."
+}
+
+resource "aws_cloudwatch_metric_alarm" "cdc_latency_critical" {
+  alarm_name          = "${var.project_name}-cdc-latency-critical"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CDCLatencySource"
+  namespace           = "AWS/DMS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 3600
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ReplicationTaskIdentifier = aws_dms_replication_task.cdc.replication_task_id
+  }
+
+  alarm_description = "Critical if CDC source latency exceeds 60 minutes."
 }
 
 output "replication_instance_arn" {

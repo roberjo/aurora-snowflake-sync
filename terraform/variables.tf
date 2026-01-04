@@ -50,15 +50,74 @@ variable "storage_integration_role_arn" {
   description = "AWS IAM role ARN Snowflake should assume for the storage integration."
   type        = string
 }
+variable "s3_force_destroy" {
+  description = "Allow S3 buckets to be destroyed when non-empty (dev only)."
+  type        = bool
+  default     = false
+}
+variable "s3_enable_access_logging" {
+  description = "Enable server access logging for the data lake bucket."
+  type        = bool
+  default     = true
+}
 
 variable "table_definitions" {
-  description = "Map of CDC staging table names to S3 prefixes for Snowpipe auto-ingest."
+  description = "Per-table configuration for Snowpipe auto-ingest and merge tasks."
   type = map(object({
-    prefix = string
+    prefix        = string
+    staging_table = string
+    final_table   = string
+    primary_keys  = list(string)
+    columns = list(object({
+      name = string
+      type = string
+    }))
+    metadata = object({
+      operation_column        = string
+      commit_timestamp_column = string
+    })
+    task_schedule = string
   }))
   default = {
-    ORDERS_CDC    = { prefix = "dms/public/orders" }
-    CUSTOMERS_CDC = { prefix = "dms/public/customers" }
+    ORDERS_CDC = {
+      prefix        = "dms/public/orders"
+      staging_table = "ORDERS_CDC"
+      final_table   = "ORDERS"
+      primary_keys  = ["ORDER_ID"]
+      columns = [
+        { name = "ORDER_ID", type = "NUMBER" },
+        { name = "CUSTOMER_ID", type = "NUMBER" },
+        { name = "STATUS", type = "STRING" },
+        { name = "UPDATED_AT", type = "TIMESTAMP_NTZ" },
+        { name = "COMMIT_TS", type = "TIMESTAMP_NTZ" },
+        { name = "OP", type = "STRING" }
+      ]
+      metadata = {
+        operation_column        = "OP"
+        commit_timestamp_column = "COMMIT_TS"
+      }
+      task_schedule = "60 MINUTE"
+    }
+    CUSTOMERS_CDC = {
+      prefix        = "dms/public/customers"
+      staging_table = "CUSTOMERS_CDC"
+      final_table   = "CUSTOMERS"
+      primary_keys  = ["CUSTOMER_ID"]
+      columns = [
+        { name = "CUSTOMER_ID", type = "NUMBER" },
+        { name = "EMAIL", type = "STRING" },
+        { name = "FIRST_NAME", type = "STRING" },
+        { name = "LAST_NAME", type = "STRING" },
+        { name = "UPDATED_AT", type = "TIMESTAMP_NTZ" },
+        { name = "COMMIT_TS", type = "TIMESTAMP_NTZ" },
+        { name = "OP", type = "STRING" }
+      ]
+      metadata = {
+        operation_column        = "OP"
+        commit_timestamp_column = "COMMIT_TS"
+      }
+      task_schedule = "60 MINUTE"
+    }
   }
 }
 
@@ -111,7 +170,17 @@ variable "dms_allocated_storage" {
 variable "dms_multi_az" {
   description = "Enable Multi-AZ for DMS replication instance."
   type        = bool
-  default     = false
+  default     = true
+}
+variable "dms_kms_key_arn" {
+  description = "KMS key ARN for DMS replication instance/storage."
+  type        = string
+  default     = null
+}
+variable "dms_log_retention_days" {
+  description = "CloudWatch log retention for DMS task logs."
+  type        = number
+  default     = 30
 }
 
 variable "dms_table_mappings" {
@@ -141,7 +210,32 @@ variable "dms_replication_task_settings" {
   default     = <<SETTINGS
 {
   "Logging": {
-    "EnableLogging": true
+    "EnableLogging": true,
+    "LogComponents": [
+      { "Id": "SOURCE_CAPTURE", "Severity": "LOGGER_SEVERITY_DEFAULT" },
+      { "Id": "TARGET_APPLY", "Severity": "LOGGER_SEVERITY_DEFAULT" }
+    ]
+  },
+  "ValidationSettings": {
+    "EnableValidation": true,
+    "ValidationMode": "RowLevel"
+  },
+  "ErrorBehavior": {
+    "DataErrorPolicy": "LOG_ERROR",
+    "DataTruncationErrorPolicy": "LOG_ERROR",
+    "TableErrorPolicy": "SUSPEND_TABLE",
+    "RecoverableErrorCount": -1,
+    "RecoverableErrorInterval": 5,
+    "RecoverableErrorThrottling": true,
+    "RecoverableErrorThrottlingMax": 1800,
+    "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+    "FailOnNoTablesCaptured": true
+  },
+  "FullLoadSettings": {
+    "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+    "StopTaskCachedChangesApplied": true,
+    "StopTaskCachedChangesNotApplied": false,
+    "MaxFullLoadSubTasks": 8
   }
 }
 SETTINGS

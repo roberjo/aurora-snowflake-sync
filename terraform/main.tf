@@ -59,7 +59,10 @@ module "network" {
 module "storage" {
   source = "./modules/storage"
 
-  project_name = var.project_name
+  project_name                 = var.project_name
+  force_destroy                = var.s3_force_destroy
+  enable_access_logging        = var.s3_enable_access_logging
+  storage_integration_role_arn = var.storage_integration_role_arn
 }
 
 module "dms" {
@@ -80,6 +83,8 @@ module "dms" {
   multi_az                 = var.dms_multi_az
   table_mappings           = var.dms_table_mappings
   replication_task_settings = var.dms_replication_task_settings
+  kms_key_arn              = var.dms_kms_key_arn
+  log_retention_days       = var.dms_log_retention_days
 }
 
 # Snowflake Module

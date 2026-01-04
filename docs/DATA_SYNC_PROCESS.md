@@ -1,30 +1,26 @@
-# Ensuring Aurora exports stay in sync with Snowflake
+# Ensuring Aurora DMS CDC stays in sync with Snowflake
 
-This guide explains how the pipeline ensures the right records are exported from Aurora and applied to Snowflake so tables remain current.
+Canonical flow: Aurora PostgreSQL WAL → AWS DMS CDC → S3 → Snowpipe → Snowflake Tasks (merge to FINAL). No Lambda export path is used.
 
 ## End-to-end flow
-1. **Load table metadata** from AWS Systems Manager Parameter Store (`/aurora-snowflake-sync/tables`) as JSON. Each entry defines:
-   * `table_name` (e.g., `public.orders`)
-   * `watermark_col` (e.g., `updated_at`)
-   * optional `primary_keys` for merge logic and `full_refresh` flag for one-off reloads.
-2. **Resolve the watermark** by querying Snowflake for the latest processed `watermark_col` value per table in the FINAL table. If a table is empty, default to `1970-01-01` to trigger a full backfill.
-3. **Build the export query** in Lambda using the watermark and table metadata. The query selects rows where `watermark_col > watermark_value` and writes them to S3 via `aws_s3.query_export_to_s3` using a table-specific prefix (`s3://<bucket>/<table>/YYYY/MM/DD/HH/run-<uuid>.csv`).
-4. **Verify the export call** by checking Lambda logs for the generated query, returned row count, and S3 object key. Unexpectedly low row counts should trigger investigation before proceeding.
-5. **Auto-ingest to Snowflake** through per-table Snowpipe objects that watch their prefix. Files are loaded into the matching STAGING table.
-6. **Merge to FINAL** using a scheduled Snowflake Task that performs `MERGE` on `primary_keys`, updating changed rows and inserting new ones. Deleted rows can be handled via a `is_deleted` soft-delete flag.
+1. **Change capture (DMS)**: DMS reads WAL from Aurora and writes full-load + CDC changes to S3 in Parquet under `dms/<schema>/<table>/...`, including operation metadata.
+2. **Staging (S3)**: The dedicated data lake bucket stores CDC files with lifecycle cleanup. Bucket policies restrict access to the Snowflake storage integration role and DMS role.
+3. **Ingestion (Snowpipe)**: S3 object-created events fan out to Snowflake’s Snowpipe SQS. Pipes copy files from the stage into per-table STAGING CDC tables using the shared PARQUET file format.
+4. **Transformation (Tasks)**: Scheduled Snowflake Tasks (or a reusable merge procedure) dedupe by primary key + commit timestamp, apply deletes/updates/inserts, and upsert into FINAL tables. Successful merges advance downstream watermarks/operational checkpoints.
 
-## Controls that ensure the right records move
-* **Watermark discipline**: The Lambda reads the watermark from Snowflake right before exporting, so retries or failed runs don’t skip data. Watermarks advance only after the merge completes successfully.
-* **Table-scoped prefixes and pipes**: Each table writes to a dedicated S3 prefix and Snowpipe, preventing cross-table pollution and making it obvious which files belong to which target.
-* **Deterministic export filters**: The Lambda assembles the `WHERE watermark_col > :watermark` predicate directly from metadata; no hardcoded table lists or timestamps mean updates are always relative to the latest ingested row.
-* **Schema alignment**: Staging/Final tables should mirror Aurora schemas; the merge task is the single point that enforces column mapping and deduplication.
+## Controls that keep data correct
+- **DMS checkpoints**: DMS tracks replication positions; restarts resume without skipping committed WAL entries. Task settings should enable validation and logging.
+- **Table-scoped prefixes/pipes**: Each table has its own prefix and pipe to prevent cross-table pollution and simplify blast-radius when pausing a single table.
+- **Schema alignment**: STAGING and FINAL tables mirror Aurora schemas; merge logic centralizes column mapping and delete handling.
+- **Secure storage**: Bucket ownership enforcement, SSE-KMS, TLS-only bucket policy, and least-privilege roles prevent accidental exposure or tampering.
 
 ## Validation and reconciliation
-* **Row count deltas**: After each run, compare the Lambda-reported export row count to Snowflake `COPY_HISTORY` and `TASK_HISTORY` affected rows. Significant mismatches should page the on-call.
-* **Watermark drift check**: A monitoring query should compute `MAX(updated_at)` in Aurora vs. Snowflake FINAL; alert if the difference exceeds the SLA (e.g., >2 hours).
-* **Sample-based verification**: Periodically sample a handful of recent Aurora rows and confirm they exist in Snowflake FINAL with identical primary keys and timestamps.
-* **Dead-letter review**: Investigate any Snowpipe `LOAD_FAILED` rows or Lambda errors before clearing the watermark to avoid data loss.
+- **COPY_HISTORY vs DMS**: Compare Snowpipe `COPY_HISTORY` row counts to DMS task metrics for recent intervals; alert on drift.
+- **Merge effects**: Review `TASK_HISTORY` affected rows and error rates; failed tasks should block watermark advancement.
+- **Freshness**: Monitor `MAX(commit_timestamp)` (or equivalent) between Aurora and FINAL; alert if the lag exceeds the SLA (e.g., >2 hours).
+- **Failure handling**: Investigate any `LOAD_FAILED` files, fix schema/data issues, and trigger Snowpipe reprocess before restarting tasks.
 
 ## Operational tips
-* To force a full reload of a table, set its Parameter Store config to `{ "full_refresh": true }`; the Lambda will skip the watermark filter for the next run and then revert to incremental mode.
-* If schema changes add new columns, deploy the DDL to Snowflake STAGING and FINAL before the export to avoid ingestion failures.
+- Pausing a table: disable its Pipe and Task; DMS continues writing files, so resume ingestion by re-enabling both.
+- Reloading a table: run a DMS table reload, truncate the STAGING table, and allow Snowpipe to re-ingest; the merge task will reconcile.
+- Schema changes: apply DDL to STAGING and FINAL before DMS emits the new columns to avoid copy failures.

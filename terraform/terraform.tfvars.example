@@ -3,13 +3,33 @@ project_name      = "aurora-snowflake-sync"
 vpc_cidr          = "10.0.0.0/16"
 snowflake_account = "xy12345.us-east-1"
 snowflake_user    = "terraform_user"
-snowflake_password = "super_secure_password"
+snowflake_password = "<use-secret-manager>"
 snowflake_role    = "SYSADMIN"
-vault_address     = "https://vault.example.com"
-vault_token       = "s.xxxxxxxx"
 storage_integration_role_arn = "arn:aws:iam::123456789012:role/snowflake-storage-integration"
-# table_definitions can be overridden to align Snowpipe pipes with S3 prefixes
+s3_force_destroy           = false
+s3_enable_access_logging   = true
+dms_multi_az               = true
+dms_kms_key_arn            = "<kms-key-arn>"
+dms_log_retention_days     = 30
+# table_definitions can be overridden to match your schemas, column names, and schedules
 # table_definitions = {
-#   ORDERS    = { prefix = "orders" }
-#   CUSTOMERS = { prefix = "customers" }
+#   ORDERS_CDC = {
+#     prefix        = "dms/public/orders"
+#     staging_table = "ORDERS_CDC"
+#     final_table   = "ORDERS"
+#     primary_keys  = ["ORDER_ID"]
+#     columns = [
+#       { name = "ORDER_ID", type = "NUMBER" },
+#       { name = "CUSTOMER_ID", type = "NUMBER" },
+#       { name = "STATUS", type = "STRING" },
+#       { name = "UPDATED_AT", type = "TIMESTAMP_NTZ" },
+#       { name = "COMMIT_TS", type = "TIMESTAMP_NTZ" },
+#       { name = "OP", type = "STRING" }
+#     ]
+#     metadata = {
+#       operation_column        = "OP"
+#       commit_timestamp_column = "COMMIT_TS"
+#     }
+#     task_schedule = "60 MINUTE"
+#   }
 # }

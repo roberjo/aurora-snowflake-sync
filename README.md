@@ -20,6 +20,8 @@ This project implements a CDC-driven data synchronization pipeline from AWS Auro
 4.  **Ingestion**: Snowflake Snowpipe (Auto-Ingest).
 5.  **Transformation**: Snowflake Tasks (Merge/Deduplicate).
 
+> Canonical ingestion is DMS CDC → S3 → Snowpipe/Tasks. There is no Lambda-based export path.
+
 ## Quick Start
 
 ### Prerequisites

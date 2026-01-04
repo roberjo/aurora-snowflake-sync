@@ -7,13 +7,33 @@
 variable "project_name" {
   description = "Project name used for bucket naming."
 }
+variable "force_destroy" {
+  description = "Allow bucket destroy even if non-empty (use only for dev)."
+  type        = bool
+  default     = false
+}
+variable "enable_access_logging" {
+  description = "Enable S3 server access logging to a dedicated log bucket."
+  type        = bool
+  default     = true
+}
+variable "storage_integration_role_arn" {
+  description = "AWS IAM role Snowflake assumes for the storage integration (granted read access via bucket policy)."
+  type        = string
+  default     = null
+}
+
+resource "aws_kms_key" "data_lake" {
+  description             = "KMS key for ${var.project_name} data lake bucket"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+}
 
 # S3 Bucket
-# The primary storage location for the exported CSV files.
-# 'force_destroy' is enabled for easier cleanup in this demo environment.
+# The primary storage location for the exported CDC files.
 resource "aws_s3_bucket" "data_lake" {
   bucket_prefix = "${var.project_name}-datalake-"
-  force_destroy = true # For demo purposes; be careful in prod
+  force_destroy = var.force_destroy
 
   tags = {
     Name = "${var.project_name}-datalake"
@@ -55,9 +75,91 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "data_lake" {
 
   rule {
     apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.data_lake.arn
+    }
+  }
+}
+
+resource "aws_s3_bucket" "data_lake_logs" {
+  count = var.enable_access_logging ? 1 : 0
+
+  bucket_prefix = "${var.project_name}-datalake-logs-"
+  force_destroy = var.force_destroy
+
+  tags = {
+    Name = "${var.project_name}-datalake-logs"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "data_lake_logs" {
+  count = var.enable_access_logging ? 1 : 0
+
+  bucket                  = aws_s3_bucket.data_lake_logs[0].id
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "data_lake_logs" {
+  count = var.enable_access_logging ? 1 : 0
+
+  bucket = aws_s3_bucket.data_lake_logs[0].id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "data_lake_logs" {
+  count = var.enable_access_logging ? 1 : 0
+
+  bucket = aws_s3_bucket.data_lake_logs[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
   }
+}
+
+data "aws_iam_policy_document" "data_lake_logs" {
+  count = var.enable_access_logging ? 1 : 0
+
+  statement {
+    sid = "AllowS3Logging"
+
+    principals {
+      type        = "Service"
+      identifiers = ["logging.s3.amazonaws.com"]
+    }
+
+    actions = ["s3:PutObject"]
+
+    resources = ["${aws_s3_bucket.data_lake_logs[0].arn}/*"]
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = [aws_s3_bucket.data_lake.arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "data_lake_logs" {
+  count = var.enable_access_logging ? 1 : 0
+
+  bucket = aws_s3_bucket.data_lake_logs[0].id
+  policy = data.aws_iam_policy_document.data_lake_logs[0].json
+}
+
+resource "aws_s3_bucket_logging" "data_lake" {
+  count = var.enable_access_logging ? 1 : 0
+
+  bucket        = aws_s3_bucket.data_lake.id
+  target_bucket = aws_s3_bucket.data_lake_logs[0].id
+  target_prefix = "access-logs/"
 }
 
 # Apply a simple lifecycle policy so transient staging data is automatically cleaned up
@@ -73,6 +175,57 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       days = 30
     }
   }
+}
+
+data "aws_iam_policy_document" "data_lake" {
+  statement {
+    sid = "DenyInsecureTransport"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions   = ["s3:*"]
+    resources = [
+      aws_s3_bucket.data_lake.arn,
+      "${aws_s3_bucket.data_lake.arn}/*"
+    ]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.storage_integration_role_arn == null ? [] : [var.storage_integration_role_arn]
+
+    content {
+      sid = "AllowSnowflakeRead"
+
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value]
+      }
+
+      actions = [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ]
+
+      resources = [
+        aws_s3_bucket.data_lake.arn,
+        "${aws_s3_bucket.data_lake.arn}/*"
+      ]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "data_lake" {
+  bucket = aws_s3_bucket.data_lake.id
+  policy = data.aws_iam_policy_document.data_lake.json
 }
 
 # Event notification will be configured in Snowflake module or via Snowpipe directly,
