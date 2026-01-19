@@ -63,7 +63,7 @@ module "storage" {
   force_destroy                = var.s3_force_destroy
   enable_access_logging        = var.s3_enable_access_logging
   storage_integration_role_arn = var.storage_integration_role_arn
-  lambda_role_arn              = module.lambda.lambda_role_arn
+  #lambda_role_arn              = module.lambda.lambda_role_arn
 }
 
 # State Module
@@ -94,8 +94,6 @@ module "lambda" {
   table_definitions   = var.lambda_table_definitions
   log_retention_days  = var.lambda_log_retention_days
   alarm_sns_topic_arn = var.alarm_sns_topic_arn
-  kms_key_arn              = var.dms_kms_key_arn
-  log_retention_days       = var.dms_log_retention_days
 }
 
 # Snowflake Module

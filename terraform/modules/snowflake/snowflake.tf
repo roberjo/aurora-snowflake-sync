@@ -156,7 +156,7 @@ locals {
       join(" AND ", [for pk in cfg.primary_keys : "T.${pk} = S.${pk}"]),
       cfg.op_col,
       cfg.op_col,
-      join(", ", [for col in cfg.final_columns : "T.${col.name} = S.${col.name}" if !(col.name in cfg.primary_keys)]),
+      join(", ", [for col in cfg.final_columns : "T.${col.name} = S.${col.name}" if col.name != cfg.op_col]),
       cfg.op_col,
       join(", ", [for col in cfg.final_columns : col.name]),
       join(", ", [for col in cfg.final_columns : "S.${col.name}"])
