@@ -125,11 +125,55 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[count.index].id
 }
 
-# DMS Security Group
-# Allows DMS replication instances to reach Aurora and S3 endpoints.
-resource "aws_security_group" "dms_sg" {
-  name        = "${var.project_name}-dms-sg"
-  description = "Security group for DMS replication"
+resource "aws_route_table" "private" {
+  count = length(aws_subnet.private)
+
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.main[count.index].id
+  }
+
+  tags = {
+    Name = "${var.project_name}-private-${count.index + 1}-rt"
+  }
+}
+
+resource "aws_route_table_association" "private" {
+  count = length(aws_subnet.private)
+
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private[count.index].id
+}
+
+resource "aws_route_table" "private" {
+  count = length(aws_subnet.private)
+
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.main[count.index].id
+  }
+
+  tags = {
+    Name = "${var.project_name}-private-${count.index + 1}-rt"
+  }
+}
+
+resource "aws_route_table_association" "private" {
+  count = length(aws_subnet.private)
+
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private[count.index].id
+}
+
+# Lambda Security Group
+# Allows Lambda functions to reach Aurora and AWS services.
+resource "aws_security_group" "lambda_sg" {
+  name        = "${var.project_name}-lambda-sg"
+  description = "Security group for Lambda CDC functions"
   vpc_id      = aws_vpc.main.id
 
   egress {
@@ -149,25 +193,24 @@ resource "aws_security_group" "dms_sg" {
   }
 
   tags = {
-    Name = "${var.project_name}-dms-sg"
+    Name = "${var.project_name}-lambda-sg"
   }
 }
 
 # Aurora Security Group
 # Controls traffic to the Aurora database.
-# Explicitly allows ingress on port 5432 (PostgreSQL) ONLY from the DMS Security Group.
+# Allows ingress on port 5432 (PostgreSQL) from the Lambda Security Group.
 resource "aws_security_group" "aurora_sg" {
   name        = "${var.project_name}-aurora-sg"
   description = "Security group for Aurora"
   vpc_id      = aws_vpc.main.id
 
   ingress {
+    description     = "PostgreSQL from Lambda"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [
-      aws_security_group.dms_sg.id
-    ]
+    security_groups = [aws_security_group.lambda_sg.id]
   }
 
   tags = {
@@ -198,8 +241,8 @@ output "private_subnet_ids" {
   value = aws_subnet.private[*].id
 }
 
-output "dms_sg_id" {
-  value = aws_security_group.dms_sg.id
+output "lambda_sg_id" {
+  value = aws_security_group.lambda_sg.id
 }
 
 output "aurora_sg_id" {

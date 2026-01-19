@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 # This is the entry point for the Terraform configuration.
 # It defines the required providers (AWS, Snowflake) and orchestrates the deployment
-# by calling child modules for Network, Storage, Compute, and Snowflake resources.
+# by calling child modules for Network, Storage, Lambda, State, and Snowflake resources.
 
 terraform {
   # Terraform Cloud configuration for state management
@@ -15,7 +15,7 @@ terraform {
   }
 
   required_providers {
-    # AWS Provider: Used to create VPC, DMS, S3, etc.
+    # AWS Provider: Used to create VPC, Lambda, S3, DynamoDB, etc.
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
@@ -44,8 +44,8 @@ provider "snowflake" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Network Module
-# Creates the VPC, Subnets, and Security Groups required for DMS
-# to run securely and connect to other resources.
+# Creates the VPC, Subnets, and Security Groups required for Lambda
+# to run securely and connect to Aurora and other resources.
 module "network" {
   source = "./modules/network"
 
@@ -63,26 +63,37 @@ module "storage" {
   force_destroy                = var.s3_force_destroy
   enable_access_logging        = var.s3_enable_access_logging
   storage_integration_role_arn = var.storage_integration_role_arn
+  lambda_role_arn              = module.lambda.lambda_role_arn
 }
 
-module "dms" {
-  source = "./modules/dms"
+# State Module
+# Creates the DynamoDB table for watermark state management.
+module "state" {
+  source = "./modules/state"
 
-  project_name             = var.project_name
-  subnet_ids               = module.network.private_subnet_ids
-  security_group_ids       = [module.network.dms_sg_id]
-  aurora_endpoint          = var.aurora_endpoint
-  aurora_port              = var.aurora_port
-  aurora_database          = var.aurora_database
-  aurora_username          = var.aurora_username
-  aurora_password          = var.aurora_password
-  s3_bucket_name           = module.storage.bucket_id
-  s3_prefix                = var.dms_s3_prefix
-  replication_instance_class = var.dms_replication_instance_class
-  allocated_storage        = var.dms_allocated_storage
-  multi_az                 = var.dms_multi_az
-  table_mappings           = var.dms_table_mappings
-  replication_task_settings = var.dms_replication_task_settings
+  project_name = var.project_name
+}
+
+# Lambda Module
+# Creates Lambda functions for CDC export from Aurora to S3.
+module "lambda" {
+  source = "./modules/lambda"
+
+  project_name        = var.project_name
+  subnet_ids          = module.network.private_subnet_ids
+  lambda_sg_id        = module.network.lambda_sg_id
+  aurora_host         = var.aurora_endpoint
+  aurora_port         = var.aurora_port
+  aurora_database     = var.aurora_database
+  aurora_secret_arn   = var.aurora_secret_arn
+  s3_bucket_name      = module.storage.bucket_id
+  s3_bucket_arn       = module.storage.bucket_arn
+  kms_key_arn         = module.storage.kms_key_arn
+  dynamodb_table_name = module.state.table_name
+  dynamodb_table_arn  = module.state.table_arn
+  table_definitions   = var.lambda_table_definitions
+  log_retention_days  = var.lambda_log_retention_days
+  alarm_sns_topic_arn = var.alarm_sns_topic_arn
   kms_key_arn              = var.dms_kms_key_arn
   log_retention_days       = var.dms_log_retention_days
 }

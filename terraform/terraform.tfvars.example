@@ -4,17 +4,41 @@ vpc_cidr          = "10.0.0.0/16"
 snowflake_account = "xy12345.us-east-1"
 snowflake_user    = "terraform_user"
 snowflake_password = "<use-secret-manager>"
+snowflake_password = "<use-secret-manager>"
 snowflake_role    = "SYSADMIN"
 storage_integration_role_arn = "arn:aws:iam::123456789012:role/snowflake-storage-integration"
 s3_force_destroy           = false
 s3_enable_access_logging   = true
-dms_multi_az               = true
-dms_kms_key_arn            = "<kms-key-arn>"
-dms_log_retention_days     = 30
-# table_definitions can be overridden to match your schemas, column names, and schedules
+
+# Aurora Configuration
+aurora_endpoint   = "my-aurora-cluster.cluster-xxxxx.us-east-1.rds.amazonaws.com"
+aurora_database   = "mydb"
+aurora_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:aurora-creds-xxxxx"
+
+# Lambda Configuration
+lambda_log_retention_days = 30
+# alarm_sns_topic_arn     = "arn:aws:sns:us-east-1:123456789012:alerts"
+
+# Lambda table definitions can be overridden to match your schemas, column names, and schedules
+# lambda_table_definitions = {
+#   ORDERS_CDC = {
+#     source_schema       = "public"
+#     source_table        = "orders"
+#     source_columns      = ["order_id", "customer_id", "status", "updated_at", "created_at"]
+#     watermark_column    = "updated_at"
+#     created_at_column   = "created_at"
+#     s3_prefix           = "cdc/public/orders"
+#     schedule_expression = "rate(5 minutes)"
+#     batch_size          = 10000
+#     timeout_seconds     = 300
+#     memory_mb           = 512
+#   }
+# }
+
+# Snowflake table definitions (for Snowpipe and merge tasks)
 # table_definitions = {
 #   ORDERS_CDC = {
-#     prefix        = "dms/public/orders"
+#     prefix        = "cdc/public/orders"
 #     staging_table = "ORDERS_CDC"
 #     final_table   = "ORDERS"
 #     primary_keys  = ["ORDER_ID"]

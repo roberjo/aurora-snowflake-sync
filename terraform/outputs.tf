@@ -14,14 +14,24 @@ output "s3_bucket_id" {
   value       = module.storage.bucket_id
 }
 
-output "dms_replication_instance_arn" {
-  description = "DMS replication instance ARN"
-  value       = module.dms.replication_instance_arn
+output "dynamodb_table_name" {
+  description = "DynamoDB table name for watermark state"
+  value       = module.state.table_name
 }
 
-output "dms_replication_task_arn" {
-  description = "DMS replication task ARN"
-  value       = module.dms.replication_task_arn
+output "lambda_function_arns" {
+  description = "ARNs of the Lambda CDC functions"
+  value       = module.lambda.lambda_function_arns
+}
+
+output "lambda_function_names" {
+  description = "Names of the Lambda CDC functions"
+  value       = module.lambda.lambda_function_names
+}
+
+output "lambda_dlq_url" {
+  description = "URL of the Lambda dead letter queue"
+  value       = module.lambda.dlq_url
 }
 
 output "snowflake_storage_integration" {

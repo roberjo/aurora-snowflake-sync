@@ -28,6 +28,33 @@ resource "aws_kms_key" "data_lake" {
   deletion_window_in_days = 7
   enable_key_rotation     = true
 }
+variable "force_destroy" {
+  description = "Allow bucket destroy even if non-empty (use only for dev)."
+  type        = bool
+  default     = false
+}
+variable "enable_access_logging" {
+  description = "Enable S3 server access logging to a dedicated log bucket."
+  type        = bool
+  default     = true
+}
+variable "storage_integration_role_arn" {
+  description = "AWS IAM role Snowflake assumes for the storage integration (granted read access via bucket policy)."
+  type        = string
+  default     = null
+}
+
+variable "lambda_role_arn" {
+  description = "AWS IAM role ARN for Lambda CDC functions (granted write access via bucket policy)."
+  type        = string
+  default     = null
+}
+
+resource "aws_kms_key" "data_lake" {
+  description             = "KMS key for ${var.project_name} data lake bucket"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+}
 
 # S3 Bucket
 # The primary storage location for the exported CDC files.
@@ -221,6 +248,81 @@ data "aws_iam_policy_document" "data_lake" {
       ]
     }
   }
+
+  dynamic "statement" {
+    for_each = var.lambda_role_arn == null ? [] : [var.lambda_role_arn]
+
+    content {
+      sid = "AllowLambdaWrite"
+
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value]
+      }
+
+      actions = [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket"
+      ]
+
+      resources = [
+        aws_s3_bucket.data_lake.arn,
+        "${aws_s3_bucket.data_lake.arn}/*"
+      ]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "data_lake" {
+  bucket = aws_s3_bucket.data_lake.id
+  policy = data.aws_iam_policy_document.data_lake.json
+}
+
+data "aws_iam_policy_document" "data_lake" {
+  statement {
+    sid = "DenyInsecureTransport"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions   = ["s3:*"]
+    resources = [
+      aws_s3_bucket.data_lake.arn,
+      "${aws_s3_bucket.data_lake.arn}/*"
+    ]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.storage_integration_role_arn == null ? [] : [var.storage_integration_role_arn]
+
+    content {
+      sid = "AllowSnowflakeRead"
+
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value]
+      }
+
+      actions = [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ]
+
+      resources = [
+        aws_s3_bucket.data_lake.arn,
+        "${aws_s3_bucket.data_lake.arn}/*"
+      ]
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "data_lake" {
@@ -239,4 +341,8 @@ output "bucket_id" {
 
 output "bucket_arn" {
   value = aws_s3_bucket.data_lake.arn
+}
+
+output "kms_key_arn" {
+  value = aws_kms_key.data_lake.arn
 }
